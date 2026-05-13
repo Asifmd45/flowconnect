@@ -44,7 +44,14 @@ function callAirtable(toolName, args) {
               resolve(JSON.parse(msg.result.content[0].text));
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          // Avoid swallowing protocol/JSON parsing errors silently.
+          // Keep the flow moving, but surface the root cause.
+          child.kill();
+          done = true;
+          reject(e instanceof Error ? e : new Error(String(e)));
+          break;
+        }
       }
     });
 
