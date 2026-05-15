@@ -247,10 +247,8 @@ Scalable integration ecosystem
 
 👨‍💻 Maintainers
 
-Priyansh Chaurasiya – Frontend developer|Ui/Ux designer
+Priyansh Chaurasiya – Full Stack Developer
 
 Priyanshi Sharma – Machine Learning Engineer | Full Stack Developer
-
-
 
 ---
