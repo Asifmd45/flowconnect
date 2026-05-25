@@ -1,10 +1,29 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { getRunHistory, type ExecutionLog } from "../api/runHistory";
+import { getRunHistory, retryJob, type ExecutionLog } from "../api/runHistory";
 
 export default function RunHistoryPage() {
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [retrying, setRetrying] = useState<Set<string>>(new Set());
+
+  async function handleRetry(logId: string) {
+    setRetrying((prev) => new Set(prev).add(logId));
+    try {
+      await retryJob(logId);
+      setLogs((prev) =>
+        prev.map((l) => (l.id === logId ? { ...l, success: true, error: undefined } : l))
+      );
+    } catch (err: any) {
+      alert(err.message || "Retry failed");
+    } finally {
+      setRetrying((prev) => {
+        const next = new Set(prev);
+        next.delete(logId);
+        return next;
+      });
+    }
+  }
 
   useEffect(() => {
     async function fetchLogs() {
@@ -89,6 +108,7 @@ export default function RunHistoryPage() {
                   <th style={{ padding: "12px 24px", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>Workflow Name</th>
                   <th style={{ padding: "12px 24px", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>Status</th>
                   <th style={{ padding: "12px 24px", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>Payload / Error</th>
+                  <th style={{ padding: "12px 24px", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>Actions</th>
                 </tr>
               </thead>
               <tbody style={{ fontSize: 14, color: "#374151" }}>
@@ -100,10 +120,10 @@ export default function RunHistoryPage() {
                       </td>
                       <td style={{ padding: "16px 24px", fontWeight: 500 }}>{log.workflow_name}</td>
                       <td style={{ padding: "16px 24px" }}>
-                        <span style={{ 
-                          padding: "4px 10px", 
-                          borderRadius: 20, 
-                          fontSize: 12, 
+                        <span style={{
+                          padding: "4px 10px",
+                          borderRadius: 20,
+                          fontSize: 12,
                           fontWeight: 600,
                           background: log.success ? "#dcfce7" : "#fee2e2",
                           color: log.success ? "#166534" : "#991b1b"
@@ -112,25 +132,45 @@ export default function RunHistoryPage() {
                         </span>
                       </td>
                       <td style={{ padding: "16px 24px", maxWidth: 300 }}>
-                        <div style={{ 
-                          background: "#f9fafb", 
-                          padding: 8, 
-                          borderRadius: 6, 
-                          fontSize: 11, 
-                          fontFamily: "monospace", 
-                          color: "#6b7280",
+                        <div style={{
+                          background: log.success ? "#f9fafb" : "#fff5f5",
+                          padding: 8,
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontFamily: "monospace",
+                          color: log.success ? "#6b7280" : "#991b1b",
                           whiteSpace: "nowrap",
                           overflow: "hidden",
                           textOverflow: "ellipsis"
                         }}>
-                          {JSON.stringify(log.payload)}
+                          {!log.success && log.error ? log.error : JSON.stringify(log.payload)}
                         </div>
+                      </td>
+                      <td style={{ padding: "16px 24px" }}>
+                        {!log.success && (
+                          <button
+                            onClick={() => handleRetry(log.id)}
+                            disabled={retrying.has(log.id)}
+                            style={{
+                              padding: "4px 12px",
+                              borderRadius: 6,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              border: "1px solid #d1d5db",
+                              background: retrying.has(log.id) ? "#f3f4f6" : "#fff",
+                              color: retrying.has(log.id) ? "#9ca3af" : "#374151",
+                              cursor: retrying.has(log.id) ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {retrying.has(log.id) ? "Retrying…" : "Retry"}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} style={{ padding: 32, textAlign: "center", color: "#9ca3af" }}>
+                    <td colSpan={5} style={{ padding: 32, textAlign: "center", color: "#9ca3af" }}>
                       No executions recorded yet.
                     </td>
                   </tr>
