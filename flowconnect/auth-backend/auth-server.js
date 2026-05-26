@@ -7,6 +7,12 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
+import {
+  workflowQueue,
+  deadLetterQueue,
+  enqueueWorkflowJob,
+  MAX_RETRIES,
+} from "./queue.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -403,14 +409,14 @@ function isGoogleFormsWorkflow(workflow) {
   return !!getGoogleTriggerConfig(workflow).form_id;
 }
 
-async function markWorkflowRun(workflowId, payload, success = true) {
+async function markWorkflowRun(workflowId, payload, success = true, error = null) {
   const workflows = await readWorkflows();
   const index = workflows.findIndex((workflow) => workflow.id === workflowId);
-  if (index === -1) return;
+  if (index === -1) return null;
 
   const existing = workflows[index];
   const now = new Date().toISOString();
-  
+
   const updated = {
     ...existing,
     run_count: (existing.run_count || 0) + 1,
@@ -424,34 +430,41 @@ async function markWorkflowRun(workflowId, payload, success = true) {
   workflows[index] = updated;
   await writeWorkflows(workflows);
 
-  //Write to Execution Logs
+  const logId = randomUUID();
   const logs = await readLogs();
-  logs.push({
-    id: randomUUID(),
+  const entry = {
+    id: logId,
     workflow_id: workflowId,
     workflow_name: existing.name,
     user_id: existing.user_id,
-    success: success,
-    payload: payload,
-    executed_at: now
-  });
-  
+    success,
+    payload,
+    executed_at: now,
+  };
+  if (error !== null) entry.error = error;
+  logs.push(entry);
+
   // Keep file size manageable by capping at 2000 logs total
   if (logs.length > 2000) {
     logs.shift();
   }
   await writeLogs(logs);
+  return logId;
 }
 
 async function executeGoogleFormsWorkflow(workflow, triggerPayload) {
-  // Action execution adapters are integration-specific and can be layered here.
-  // For now we persist trigger execution metadata and workflow run counters.
-  await markWorkflowRun(workflow.id, {
+  const executionPayload = {
     source: "googleforms",
     trigger: workflow.trigger,
     trigger_payload: triggerPayload,
     actions: workflow.actions || [],
-  });
+  };
+
+  if (workflowQueue) {
+    await enqueueWorkflowJob(workflow.id, executionPayload);
+  } else {
+    await markWorkflowRun(workflow.id, executionPayload);
+  }
 }
 
 async function pollGoogleFormsTriggers() {
@@ -1109,6 +1122,87 @@ app.post("/api/webhooks/googleforms", async (req, res) => {
     triggered_workflows: workflows.length,
   });
 });
+
+app.get("/api/workflows/failed-jobs", authMiddleware, async (req, res) => {
+  if (!deadLetterQueue) return res.json([]);
+  try {
+    const jobs = await deadLetterQueue.getJobs(["waiting", "delayed", "active"]);
+    const workflows = await readWorkflows();
+    const userWorkflowIds = new Set(
+      workflows.filter((w) => w.user_id === req.user.id).map((w) => w.id)
+    );
+    return res.json(
+      jobs
+        .filter((j) => userWorkflowIds.has(j.data.workflowId))
+        .map((j) => ({
+          jobId: j.id,
+          workflowId: j.data.workflowId,
+          executionPayload: j.data.executionPayload,
+        }))
+    );
+  } catch (err) {
+    return res.status(500).json({ detail: String(err.message) });
+  }
+});
+
+app.post("/api/workflows/retry/:logId", authMiddleware, async (req, res) => {
+  if (!deadLetterQueue) {
+    return res.status(503).json({ detail: "Queue not enabled. Set REDIS_URL to enable retry." });
+  }
+  try {
+    const job = await deadLetterQueue.getJob(req.params.logId);
+    if (!job) {
+      return res.status(404).json({ detail: "Job not found in dead-letter queue." });
+    }
+    const workflows = await readWorkflows();
+    const workflow = workflows.find(
+      (w) => w.id === job.data.workflowId && w.user_id === req.user.id
+    );
+    if (!workflow) {
+      return res.status(403).json({ detail: "Not authorized or workflow not found." });
+    }
+    await job.remove();
+    await enqueueWorkflowJob(job.data.workflowId, job.data.executionPayload);
+    return res.json({ ok: true, message: "Job requeued for retry." });
+  } catch (err) {
+    return res.status(500).json({ detail: String(err.message) });
+  }
+});
+
+if (workflowQueue) {
+  workflowQueue.process(async (job) => {
+    const { workflowId, executionPayload } = job.data;
+    const workflows = await readWorkflows();
+    const workflow = workflows.find((w) => w.id === workflowId);
+    if (!workflow) throw new Error(`Workflow ${workflowId} not found`);
+    await markWorkflowRun(workflow.id, executionPayload, true);
+  });
+
+  workflowQueue.on("failed", async (job, err) => {
+    const maxAttempts = job.opts.attempts || MAX_RETRIES;
+    if (job.attemptsMade < maxAttempts) return;
+    try {
+      const logId = await markWorkflowRun(
+        job.data.workflowId,
+        job.data.executionPayload,
+        false,
+        err.message
+      );
+      if (logId) {
+        await deadLetterQueue.add(
+          { workflowId: job.data.workflowId, executionPayload: job.data.executionPayload },
+          { jobId: logId }
+        );
+      }
+    } catch (e) {
+      console.error("[Queue] Failed to record failed job:", e.message);
+    }
+  });
+
+  console.log("[Queue] Workflow queue initialized with Redis");
+} else {
+  console.log("[Queue] REDIS_URL not set — running without queue (direct execution)");
+}
 
 setInterval(() => {
   pollGoogleFormsTriggers().catch((error) => {
