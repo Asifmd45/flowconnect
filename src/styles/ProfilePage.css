@@ -308,6 +308,8 @@
     color: var(--error-500);
     box-shadow: var(--shadow-sm);
 }
+
+/* Responsive Design */
 @media (max-width: 768px) {
     .profile-stats {
         grid-template-columns: 1fr;
@@ -320,8 +322,8 @@
 
     .profile-card {
         padding: 20px;
-   overflow: hidden;
- }
+        overflow: hidden;
+    }
 
     .profile-section-title {
         font-size: 20px;
