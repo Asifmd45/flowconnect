@@ -114,6 +114,8 @@
     transition: all 0.2s ease;
     text-align: left;
     width: 100%;
+    min-height: 48px;
+    justify-content: flex-start;
 }
 
 .profile-nav-btn:hover {
@@ -135,7 +137,7 @@
 .profile-content {
     display: flex;
     flex-direction: column;
-    gap: 32px;
+    gap: 24px;
 }
 
 .profile-section-title {
@@ -245,6 +247,8 @@
     border: 1px solid var(--border-default);
     border-radius: 12px;
     margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .app-info {
@@ -303,4 +307,25 @@
     background: white;
     color: var(--error-500);
     box-shadow: var(--shadow-sm);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .profile-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-container {
+        padding: 0 16px;
+        gap: 24px;
+    }
+
+    .profile-card {
+        padding: 20px;
+        overflow: hidden;
+    }
+
+    .profile-section-title {
+        font-size: 20px;
+    }
 }
