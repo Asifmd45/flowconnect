@@ -6,7 +6,7 @@ It is built with a **React + Vite frontend**, a **lightweight Express server**, 
 
 ---
 
-## 🚀 NSOC '26 Participation
+## 🚀 SSOC'26 And NSOC '26 Participation
 
 Pravah is an **official project in Nexus Spring of Code 2026 (NSOC '26)**.
 
