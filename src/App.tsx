@@ -21,6 +21,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import { AuthProvider } from './context/AuthContext'
 import { ScrollButtons } from "./components/common/ScrollButtons";
 import Layout from './components/common/Layout'
+import Solutions from "./pages/Solutions";
 
 
 // --- Route Protectors ---
@@ -122,6 +123,7 @@ function AppContent() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/solutions" element={<Solutions />} />
 
       </Routes>
        <ScrollButtons />{/* Scroll navigation buttons */}

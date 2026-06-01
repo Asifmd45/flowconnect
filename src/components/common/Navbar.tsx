@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, Zap, Sun, Moon, LogOut, Bell, LayoutDashboard, FolderKanban, Settings, UserCircle2 } from 'lucide-react'
@@ -26,6 +27,8 @@ const privateNavLinks: NavLink[] = [
     { label: 'Workspace', href: '/builder', type: 'page' },
     { label: 'Settings', href: '/profile', type: 'page' },
     { label: 'Notifications', href: '/run-history', type: 'page' },
+    { label: 'Solutions', href: '/solutions', type: 'page' },
+
 ]
 
 export default function Navbar() {
